@@ -1,24 +1,27 @@
 use crate::field::Field;
+
 // Generic elliptic curve
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct EllipticCurve<F: Field> {
     weierstrass_coefficients: [F; 6],
 }
 
 // Rational point on an elliptic curve (affine coords)
-#[derive(Clone, Debug)]
-pub struct ECPoint<F: Field> {
+#[derive(Clone, Debug, PartialEq)]
+pub struct ECPoint<F: Field + Clone> {
     pub curve: EllipticCurve<F>,
     pub x: F,
     pub y: F,
 }
 
 // Elliptic curve data structure
-impl<F: Field> EllipticCurve<F> {
+impl<F: Field + Clone + PartialEq> EllipticCurve<F> {
     // New curve, long Weierstrass form
     // y² + a1 xy + a3 y = x³ + a2 x² + a4 x + a6
     pub fn new_long_weierstrass(coeffs: [F; 6]) -> Self {
-        unimplemented!()
+        return EllipticCurve {
+            weierstrass_coefficients: coeffs,
+        };
     }
 
     // Random point
@@ -26,14 +29,18 @@ impl<F: Field> EllipticCurve<F> {
         unimplemented!()
     }
 
+    pub fn infinity_point(self) -> ECPoint<F> {
+        unimplemented!()
+    }
+
     // Get long Weierstrass coeffs
     pub fn get_a_invariants(&self) -> [F; 6] {
-        unimplemented!()
+        return self.weierstrass_coefficients.clone();
     }
 }
 
 // Point operations
-impl<F: Field + Clone + Eq> ECPoint<F> {
+impl<F: Field + Clone + PartialEq> ECPoint<F> {
     // New point from affine coords
     pub fn new_affine(curve: &EllipticCurve<F>, x: F, y: F) -> Self {
         unimplemented!()
@@ -46,7 +53,7 @@ impl<F: Field + Clone + Eq> ECPoint<F> {
 
     // Returns true if the two points are equal
     pub fn is_equal(&self, other: &Self) -> bool {
-        unimplemented!()
+        return self.curve == other.curve && self.x == other.x && self.y == other.y;
     }
 
     // Returns the evaluation of the line PQ at R, where P is self
@@ -97,10 +104,7 @@ impl<F: Field + Clone + Eq> ECPoint<F> {
             // Case P = Q
 
             let a = self.curve.get_a_invariants();
-            let a1 = &a[0];
-            let a2 = &a[1];
-            let a3 = &a[2];
-            let a4 = &a[3];
+            let (a1, a2, a3, a4) = (&a[0], &a[1], &a[2], &a[3]);
 
             // 3x² + 2x a2 - y a1 + a4
             let num = x_p
@@ -132,7 +136,67 @@ impl<F: Field + Clone + Eq> ECPoint<F> {
 
     // Returns the addition of self with Q
     pub fn add(&self, pt_q: &Self) -> Self {
-        unimplemented!()
+        let x1 = &self.x;
+        let y1 = &self.y;
+        let x2 = &pt_q.x;
+        let y2 = &pt_q.y;
+        let a = &self.curve.get_a_invariants();
+        let (a1, a2, a3, a4, a6) = (&a[0], &a[1], &a[2], &a[3], &a[5]);
+
+        if x1 == x2 && y1.clone().add(&y2).add(&a1.clone().mul(&x2)).add(&a3) == F::zero() {
+            return self.curve.clone().infinity_point();
+        } else {
+            let lambda;
+            let nu;
+            if x1 == x2 {
+                lambda = (a4
+                    .clone()
+                    .add(&x1.clone().square().zmul(3))
+                    .add(&a2.clone().mul(&x1).zmul(2))
+                    .add(&a1.clone().mul(&y1).neg()))
+                .div(
+                    &a3.clone()
+                        .add(&y1.clone().zmul(2))
+                        .add(&a1.clone().mul(&x1)),
+                );
+                nu = (x1.clone().square().mul(&x1).neg())
+                    .add(&a4.clone().mul(&x1))
+                    .add(&a6.clone().zmul(2))
+                    .add(&a3.clone().mul(&y1).neg())
+                    .div(
+                        &a3.clone()
+                            .add(&y1.clone().zmul(2))
+                            .add(&a1.clone().mul(&x1)),
+                    );
+            } else {
+                lambda = y2
+                    .clone()
+                    .add(&y1.clone().neg())
+                    .div(&x2.clone().add(&x1.clone().neg()));
+                nu = y1
+                    .clone()
+                    .mul(&x2)
+                    .add(&y2.clone().mul(&x1).neg())
+                    .div(&x2.clone().add(&x1.clone().neg()));
+            }
+            let x = a2
+                .clone()
+                .neg()
+                .add(&x1.clone().add(&x2).neg())
+                .add(&lambda.clone().square())
+                .add(&a1.clone().mul(&lambda));
+            let y = a3
+                .clone()
+                .add(&nu)
+                .add(&x.clone().mul(&lambda.add(&a1)))
+                .neg();
+
+            return ECPoint {
+                curve: self.curve.clone(),
+                x,
+                y,
+            };
+        }
     }
 
     // Doubles self
@@ -142,6 +206,12 @@ impl<F: Field + Clone + Eq> ECPoint<F> {
 
     // Returns the inverse of self
     pub fn invert(&self) -> Self {
-        unimplemented!()
+        let a = self.curve.get_a_invariants();
+        let (a1, a3) = (&a[0], &a[2]);
+        return ECPoint {
+            curve: self.curve.clone(),
+            x: self.x.clone(),
+            y: a3.clone().add(&a1.clone().mul(&self.x)).add(&self.y).neg(),
+        };
     }
 }
